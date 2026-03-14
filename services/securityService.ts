@@ -49,40 +49,46 @@ export async function isRateLimited(ipAddress: string): Promise<boolean> {
   }
 }
 
+// Fail-open if LoginAttempt table is missing or not permitted
 export async function isAccountLocked(email: string): Promise<LockStatus> {
   const lockoutThreshold = new Date(
     Date.now() - SECURITY_CONFIG.LOCKOUT_DURATION_MINUTES * 60 * 1000
   );
-  const recentFailures = await LoginAttempt.count({
-    where: {
-      email,
-      success: false,
-      timestamp: { [Op.gte]: lockoutThreshold },
-    },
-  });
-
-  if (recentFailures >= SECURITY_CONFIG.MAX_FAILED_ATTEMPTS) {
-    const lastAttempt: any = await LoginAttempt.findOne({
-      where: { email, success: false },
-      order: [['timestamp', 'DESC']],
+  try {
+    const recentFailures = await LoginAttempt.count({
+      where: {
+        email,
+        success: false,
+        timestamp: { [Op.gte]: lockoutThreshold },
+      },
     });
-    if (lastAttempt) {
-      const unlockTime = new Date(
-        lastAttempt.timestamp.getTime() +
-          SECURITY_CONFIG.LOCKOUT_DURATION_MINUTES * 60 * 1000
-      );
-      if (new Date() < unlockTime) {
-        return {
-          locked: true,
-          minutesRemaining: Math.ceil(
-            (unlockTime.getTime() - Date.now()) / (60 * 1000)
-          ),
-          unlockTime,
-        };
+
+    if (recentFailures >= SECURITY_CONFIG.MAX_FAILED_ATTEMPTS) {
+      const lastAttempt: any = await LoginAttempt.findOne({
+        where: { email, success: false },
+        order: [['timestamp', 'DESC']],
+      });
+      if (lastAttempt) {
+        const unlockTime = new Date(
+          lastAttempt.timestamp.getTime() +
+            SECURITY_CONFIG.LOCKOUT_DURATION_MINUTES * 60 * 1000
+        );
+        if (new Date() < unlockTime) {
+          return {
+            locked: true,
+            minutesRemaining: Math.ceil(
+              (unlockTime.getTime() - Date.now()) / (60 * 1000)
+            ),
+            unlockTime,
+          };
+        }
       }
     }
+    return { locked: false };
+  } catch (err) {
+    console.error('[security] isAccountLocked query failed', err);
+    return { locked: false };
   }
-  return { locked: false };
 }
 
 export async function shouldShowChallenge(
@@ -92,21 +98,31 @@ export async function shouldShowChallenge(
   const windowStart = new Date(
     Date.now() - SECURITY_CONFIG.RATE_LIMIT_WINDOW_MINUTES * 60 * 1000
   );
-  const recentFailures = await LoginAttempt.count({
-    where: {
-      [Op.or]: [{ email }, { ipAddress }],
-      success: false,
-      timestamp: { [Op.gte]: windowStart },
-    },
-  });
-  return recentFailures >= SECURITY_CONFIG.CHALLENGE_AFTER_FAILURES;
+  try {
+    const recentFailures = await LoginAttempt.count({
+      where: {
+        [Op.or]: [{ email }, { ipAddress }],
+        success: false,
+        timestamp: { [Op.gte]: windowStart },
+      },
+    });
+    return recentFailures >= SECURITY_CONFIG.CHALLENGE_AFTER_FAILURES;
+  } catch (err) {
+    console.error('[security] shouldShowChallenge query failed', err);
+    return false;
+  }
 }
 
 export async function isSuspiciousIP(ipAddress: string): Promise<boolean> {
-  const totalFailures = await LoginAttempt.count({
-    where: { ipAddress, success: false },
-  });
-  return totalFailures >= SECURITY_CONFIG.SUSPICIOUS_IP_THRESHOLD;
+  try {
+    const totalFailures = await LoginAttempt.count({
+      where: { ipAddress, success: false },
+    });
+    return totalFailures >= SECURITY_CONFIG.SUSPICIOUS_IP_THRESHOLD;
+  } catch (err) {
+    console.error('[security] isSuspiciousIP query failed', err);
+    return false;
+  }
 }
 
 export async function logLoginAttempt(data: LoginAttemptData): Promise<void> {
