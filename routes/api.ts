@@ -1786,7 +1786,7 @@ router.get('/capital-share/summary', requireRoles('ADMIN', 'TREASURER'), async (
   } catch (err) {
     console.error('Capital share summary error', err);
     if (softFailCapitalShare(err)) {
-      return res.json({ items: [], total: 0, page: 1, totalPages: 1 });
+      return res.json([]);
     }
     res.status(500).json({ error: 'Server error' });
   }
