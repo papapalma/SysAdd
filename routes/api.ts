@@ -1748,6 +1748,16 @@ router.delete('/announcements/:id', requireRoles('ADMIN', 'SECRETARY'), async (r
 
 // ─── Capital Share: Summary (all members) ───────────────────────────────
 // NOTE: /capital-share/summary MUST be registered before /capital-share/:memberId
+function softFailCapitalShare(err: any): boolean {
+  const code = err?.original?.code || err?.parent?.code;
+  return (
+    code === 'ER_NO_SUCH_TABLE' ||
+    code === 'ER_TABLEACCESS_DENIED_ERROR' ||
+    code === 'ER_DBACCESS_DENIED_ERROR' ||
+    code === 'ER_NO_DB_ERROR'
+  );
+}
+
 router.get('/capital-share/summary', requireRoles('ADMIN', 'TREASURER'), async (req: Request, res: Response) => {
   try {
     const hasPagination = req.query.page !== undefined || req.query.limit !== undefined;
@@ -1775,6 +1785,9 @@ router.get('/capital-share/summary', requireRoles('ADMIN', 'TREASURER'), async (
     res.json({ items, total, page, totalPages: Math.ceil(total / limit) || 1 });
   } catch (err) {
     console.error('Capital share summary error', err);
+    if (softFailCapitalShare(err)) {
+      return res.json({ items: [], total: 0, page: 1, totalPages: 1 });
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -1794,6 +1807,9 @@ router.get('/capital-share/pending', requireRoles('ADMIN', 'TREASURER'), async (
     res.json(txs);
   } catch (err) {
     console.error('Capital share pending error', err);
+    if (softFailCapitalShare(err)) {
+      return res.json([]);
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -1813,6 +1829,9 @@ router.get('/capital-share/transactions', requireRoles('ADMIN', 'TREASURER'), as
     res.json(txs);
   } catch (err) {
     console.error('Capital share transactions error', err);
+    if (softFailCapitalShare(err)) {
+      return res.json([]);
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -1842,6 +1861,9 @@ router.get('/capital-share/:memberId', requireAuth, async (req: Request, res: Re
     res.json(withBalance);
   } catch (err) {
     console.error('Capital share ledger error', err);
+    if (softFailCapitalShare(err)) {
+      return res.json([]);
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -1872,6 +1894,9 @@ router.post('/capital-share', requireRoles('ADMIN', 'TREASURER'), async (req: Re
     res.status(201).json(tx);
   } catch (err) {
     console.error('Capital share POST error', err);
+    if (softFailCapitalShare(err)) {
+      return res.status(503).json({ error: 'Capital share unavailable (table missing or access denied)' });
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -1914,6 +1939,9 @@ router.put('/capital-share/:txId/confirm', requireRoles('ADMIN', 'TREASURER'), a
     const clientMessage = (err as any)?.clientMessage;
     if (statusCode && clientMessage) return res.status(statusCode).json({ error: clientMessage });
     console.error('Capital share confirm error', err);
+    if (softFailCapitalShare(err)) {
+      return res.status(503).json({ error: 'Capital share unavailable (table missing or access denied)' });
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -1944,6 +1972,9 @@ router.put('/capital-share/:txId/reject', requireRoles('ADMIN', 'TREASURER'), as
     res.json(tx);
   } catch (err) {
     console.error('Capital share reject error', err);
+    if (softFailCapitalShare(err)) {
+      return res.status(503).json({ error: 'Capital share unavailable (table missing or access denied)' });
+    }
     res.status(500).json({ error: 'Server error' });
   }
 });
