@@ -4,7 +4,7 @@
   "main": "index.ts",
   "type": "module",
   "scripts": {
-    "start": "tsx index.ts",
+    "start": "npm run build && node dist/index.js",
     "dev": "tsx watch index.ts",
     "build": "tsc --outDir dist --noEmit false",
     "start:prod": "node dist/index.js",

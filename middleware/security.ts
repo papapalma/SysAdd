@@ -80,15 +80,20 @@ export function securityHeadersMiddleware(
   res: Response,
   next: NextFunction
 ): void {
+  const apiOrigin = process.env.API_ORIGIN || 'https://micaco.org';
+  const frontendOrigin = process.env.FRONTEND_URL || 'https://micaco.site';
+  const connectSrc = ["'self'", apiOrigin, frontendOrigin].join(' ');
+  const imgSrc = ["'self'", 'data:', 'blob:', apiOrigin, frontendOrigin].join(' ');
+
   res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader(
     'Content-Security-Policy',
     "default-src 'self'; " +
       "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
       "style-src 'self' 'unsafe-inline'; " +
-      "img-src 'self' data: blob: http://127.0.0.1:3000; " +
+      `img-src ${imgSrc}; ` +
       "font-src 'self' data:; " +
-      "connect-src 'self' http://127.0.0.1:3000; " +
+      `connect-src ${connectSrc}; ` +
       "frame-ancestors 'none'; " +
       "base-uri 'self'; " +
       "form-action 'self'"
@@ -149,7 +154,8 @@ export function rateLimiter(maxRequests: number, windowMs: number) {
 
 // ─── Session Config ────────────────────────────────────────────────────────
 const sessionSecret = process.env.SESSION_SECRET || 'dev-session-secret';
-const cookieSecure = parseBool(process.env.SESSION_COOKIE_SECURE, process.env.NODE_ENV === 'production');
+const cookieSecure = true; // Hostinger uses HTTPS; keep cookies secure in prod
+const sameSiteMode = 'none' as const; // allow cross-site cookies (frontend on different domain)
 
 export const sessionConfig: SessionOptions = {
   secret: sessionSecret,
@@ -159,7 +165,7 @@ export const sessionConfig: SessionOptions = {
   cookie: {
     httpOnly: true,
     secure: cookieSecure,
-    sameSite: 'strict' as const,
+    sameSite: sameSiteMode,
     maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
   },
   rolling: true,
