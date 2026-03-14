@@ -86,7 +86,8 @@ async function ensureRequiredSchema(): Promise<void> {
   }
 }
 
-ensureRequiredSchema().catch((err) => console.error('Schema bootstrap error:', err));
+// Schema sync disabled in production (tables are pre-created)
+// ensureRequiredSchema().catch((err) => console.error('Schema bootstrap error:', err));
 
 // ─── Request Logger ────────────────────────────────────────────────────────
 router.use((req: Request, _res: Response, next) => {
