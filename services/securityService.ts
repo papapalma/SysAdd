@@ -2,6 +2,29 @@ import LoginAttempt from '../models/LoginAttempt.js';
 import { User } from '../models/userModel.js';
 import { Op } from 'sequelize';
 
+// LoginAttempt table is optional in some deployments; fail-open if missing/denied
+let loginAttemptLoggingDisabled = false;
+
+function shouldDisableLoginAttempts(err: any): boolean {
+  const code = err?.original?.code || err?.parent?.code;
+  return (
+    code === 'ER_NO_SUCH_TABLE' ||
+    code === 'ER_TABLEACCESS_DENIED_ERROR' ||
+    code === 'ER_DBACCESS_DENIED_ERROR' ||
+    code === 'ER_NO_DB_ERROR'
+  );
+}
+
+function disableLoginAttempts(err: any) {
+  if (loginAttemptLoggingDisabled) return;
+  if (shouldDisableLoginAttempts(err)) {
+    loginAttemptLoggingDisabled = true;
+    console.warn(
+      '[security] LoginAttempt tracking disabled (table missing or access denied). Proceeding without rate-limit/lockout checks.'
+    );
+  }
+}
+
 interface SecurityConfig {
   MAX_FAILED_ATTEMPTS: number;
   LOCKOUT_DURATION_MINUTES: number;
@@ -35,6 +58,7 @@ const SECURITY_CONFIG: SecurityConfig = {
 };
 
 export async function isRateLimited(ipAddress: string): Promise<boolean> {
+  if (loginAttemptLoggingDisabled) return false;
   const windowStart = new Date(
     Date.now() - SECURITY_CONFIG.RATE_LIMIT_WINDOW_MINUTES * 60 * 1000
   );
@@ -45,12 +69,14 @@ export async function isRateLimited(ipAddress: string): Promise<boolean> {
     return count >= SECURITY_CONFIG.MAX_ATTEMPTS_PER_IP;
   } catch (err) {
     console.error('[security] isRateLimited query failed', err);
+    disableLoginAttempts(err);
     return false; // fail-open on rate limit if table/query fails
   }
 }
 
 // Fail-open if LoginAttempt table is missing or not permitted
 export async function isAccountLocked(email: string): Promise<LockStatus> {
+  if (loginAttemptLoggingDisabled) return { locked: false };
   const lockoutThreshold = new Date(
     Date.now() - SECURITY_CONFIG.LOCKOUT_DURATION_MINUTES * 60 * 1000
   );
@@ -87,6 +113,7 @@ export async function isAccountLocked(email: string): Promise<LockStatus> {
     return { locked: false };
   } catch (err) {
     console.error('[security] isAccountLocked query failed', err);
+    disableLoginAttempts(err);
     return { locked: false };
   }
 }
@@ -95,6 +122,7 @@ export async function shouldShowChallenge(
   email: string,
   ipAddress: string
 ): Promise<boolean> {
+  if (loginAttemptLoggingDisabled) return false;
   const windowStart = new Date(
     Date.now() - SECURITY_CONFIG.RATE_LIMIT_WINDOW_MINUTES * 60 * 1000
   );
@@ -109,11 +137,13 @@ export async function shouldShowChallenge(
     return recentFailures >= SECURITY_CONFIG.CHALLENGE_AFTER_FAILURES;
   } catch (err) {
     console.error('[security] shouldShowChallenge query failed', err);
+    disableLoginAttempts(err);
     return false;
   }
 }
 
 export async function isSuspiciousIP(ipAddress: string): Promise<boolean> {
+  if (loginAttemptLoggingDisabled) return false;
   try {
     const totalFailures = await LoginAttempt.count({
       where: { ipAddress, success: false },
@@ -121,11 +151,13 @@ export async function isSuspiciousIP(ipAddress: string): Promise<boolean> {
     return totalFailures >= SECURITY_CONFIG.SUSPICIOUS_IP_THRESHOLD;
   } catch (err) {
     console.error('[security] isSuspiciousIP query failed', err);
+    disableLoginAttempts(err);
     return false;
   }
 }
 
 export async function logLoginAttempt(data: LoginAttemptData): Promise<void> {
+  if (loginAttemptLoggingDisabled) return;
   try {
     await LoginAttempt.create({
       ...data,
@@ -133,6 +165,7 @@ export async function logLoginAttempt(data: LoginAttemptData): Promise<void> {
     });
   } catch (error) {
     console.error('Failed to log login attempt:', error);
+    disableLoginAttempts(error);
   }
 }
 
@@ -181,6 +214,7 @@ export function generateChallenge(): { question: string; answer: number } {
 
 export async function cleanupOldAttempts(daysToKeep = 90): Promise<number> {
   const cutoffDate = new Date(Date.now() - daysToKeep * 24 * 60 * 60 * 1000);
+  if (loginAttemptLoggingDisabled) return 0;
   try {
     const deleted = await LoginAttempt.destroy({
       where: { timestamp: { [Op.lt]: cutoffDate } },
