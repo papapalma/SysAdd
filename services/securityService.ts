@@ -38,10 +38,15 @@ export async function isRateLimited(ipAddress: string): Promise<boolean> {
   const windowStart = new Date(
     Date.now() - SECURITY_CONFIG.RATE_LIMIT_WINDOW_MINUTES * 60 * 1000
   );
-  const count = await LoginAttempt.count({
-    where: { ipAddress, timestamp: { [Op.gte]: windowStart } },
-  });
-  return count >= SECURITY_CONFIG.MAX_ATTEMPTS_PER_IP;
+  try {
+    const count = await LoginAttempt.count({
+      where: { ipAddress, timestamp: { [Op.gte]: windowStart } },
+    });
+    return count >= SECURITY_CONFIG.MAX_ATTEMPTS_PER_IP;
+  } catch (err) {
+    console.error('[security] isRateLimited query failed', err);
+    return false; // fail-open on rate limit if table/query fails
+  }
 }
 
 export async function isAccountLocked(email: string): Promise<LockStatus> {
