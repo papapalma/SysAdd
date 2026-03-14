@@ -201,11 +201,15 @@ type SessionAuthUser = {
   status: string;
 };
 
+// Temporary auth bypass flag (extremely insecure; for troubleshooting only)
+const AUTH_BYPASS = String(process.env.DISABLE_AUTH || '').toLowerCase() === 'true';
+
 const getSessionAuthUser = (req: Request): SessionAuthUser | null => {
   return ((req.session as any)?.authUser || null) as SessionAuthUser | null;
 };
 
 const requireAuth = (req: Request, res: Response, next: Function) => {
+  if (AUTH_BYPASS) return next();
   if (!getSessionAuthUser(req)) {
     return res.status(401).json({ error: 'Authentication required' });
   }
@@ -214,6 +218,7 @@ const requireAuth = (req: Request, res: Response, next: Function) => {
 
 const requireRoles = (...roles: string[]) => {
   return (req: Request, res: Response, next: Function) => {
+    if (AUTH_BYPASS) return next();
     const actor = getSessionAuthUser(req);
     if (!actor) return res.status(401).json({ error: 'Authentication required' });
     const actorRole = String(actor.role || '').toUpperCase();
@@ -225,6 +230,7 @@ const requireRoles = (...roles: string[]) => {
 
 const requireSelfOrRoles = (...roles: string[]) => {
   return (req: Request, res: Response, next: Function) => {
+    if (AUTH_BYPASS) return next();
     const actor = getSessionAuthUser(req);
     if (!actor) return res.status(401).json({ error: 'Authentication required' });
     if (String(actor.id) === String(req.params.id)) return next();
