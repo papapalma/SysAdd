@@ -157,6 +157,7 @@ export function rateLimiter(maxRequests: number, windowMs: number) {
 const sessionSecret = process.env.SESSION_SECRET || 'dev-session-secret';
 const cookieSecure = true; // Hostinger uses HTTPS; keep cookies secure in prod
 const sameSiteMode = 'none' as const; // allow cross-site cookies (frontend on different domain)
+const cookieDomain = (process.env.SESSION_COOKIE_DOMAIN || '').trim() || undefined;
 
 export const sessionConfig: SessionOptions = {
   secret: sessionSecret,
@@ -167,6 +168,8 @@ export const sessionConfig: SessionOptions = {
     httpOnly: true,
     secure: cookieSecure,
     sameSite: sameSiteMode,
+    // Explicit domain helps cross-site cookies when API and frontend are on different hosts
+    ...(cookieDomain ? { domain: cookieDomain } : {}),
     maxAge: 1000 * 60 * 60 * 24 * 30, // 30 days
   },
   rolling: true,
