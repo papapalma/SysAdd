@@ -13,8 +13,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = Number(process.env.PORT) || 3000;
+const HOST = process.env.HOST || '0.0.0.0';
 const FRONTEND_URL = (process.env.FRONTEND_URL || '').trim();
+const API_ORIGIN = (process.env.API_ORIGIN || '').trim();
 const extraCorsOrigins = (process.env.CORS_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -23,6 +25,9 @@ const extraCorsOrigins = (process.env.CORS_ORIGINS || '')
 if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
   throw new Error('SESSION_SECRET must be set in production');
 }
+
+// Trust proxy for correct secure cookies and protocol detection behind Hostinger proxy
+app.set('trust proxy', 1);
 
 // ─── Security Middleware (applied first) ───────────────────────────────────
 app.disable('x-powered-by');
@@ -53,6 +58,7 @@ const allowedOrigins = Array.from(
   new Set([
     ...devOrigins,
     ...(FRONTEND_URL ? [FRONTEND_URL] : []),
+    ...(API_ORIGIN ? [API_ORIGIN] : []),
     ...extraCorsOrigins,
   ])
 );
@@ -75,7 +81,9 @@ app.use('/', router);
 export default app;
 
 if (!process.env.ELECTRON) {
-  app.listen(PORT, () => {
-    console.log(`Server running at http://localhost:${PORT}`);
+  app.listen(PORT, HOST, () => {
+    console.log(`Server running at http://${HOST}:${PORT}`);
+    if (FRONTEND_URL) console.log(`Allowed frontend: ${FRONTEND_URL}`);
+    if (API_ORIGIN) console.log(`API origin (CSP/CORS): ${API_ORIGIN}`);
   });
 }
