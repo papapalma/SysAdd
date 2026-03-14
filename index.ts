@@ -3,14 +3,9 @@ import express from 'express';
 import path from 'path';
 import session from 'express-session';
 import cors from 'cors';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 import router from './routes/index.js';
 import apiRouter from './routes/api.js';
 import security from './middleware/security.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;

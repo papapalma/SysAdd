@@ -2,7 +2,6 @@
   "name": "backend",
   "version": "2.0.0",
   "main": "index.ts",
-  "type": "module",
   "scripts": {
     "start": "npm run build && node dist/index.js",
     "dev": "tsx watch index.ts",

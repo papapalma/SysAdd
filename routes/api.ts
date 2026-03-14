@@ -5,8 +5,6 @@ import multer from 'multer';
 import sharp from 'sharp';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
 import { Op, DataTypes } from 'sequelize';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
@@ -27,8 +25,6 @@ import { validatePasswordStrength, calculatePasswordStrength, getPasswordStrengt
 
 const router = Router();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 const backendPublicDir = path.resolve(__dirname, '..', 'public');
 
 async function ensureRequiredSchema(): Promise<void> {
@@ -90,7 +86,7 @@ async function ensureRequiredSchema(): Promise<void> {
   }
 }
 
-await ensureRequiredSchema();
+ensureRequiredSchema().catch((err) => console.error('Schema bootstrap error:', err));
 
 // ─── Request Logger ────────────────────────────────────────────────────────
 router.use((req: Request, _res: Response, next) => {
