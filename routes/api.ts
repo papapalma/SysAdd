@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import type { Express } from 'express';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import sharp from 'sharp';

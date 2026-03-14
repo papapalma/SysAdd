@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import type { Express } from 'express';
 import type { SessionOptions } from 'express-session';
 import { parse as parseUrl } from 'url';
 import path from 'path';
