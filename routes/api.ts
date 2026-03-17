@@ -198,6 +198,8 @@ const getSessionAuthUser = (req: Request): SessionAuthUser | null => {
   return ((req.session as any)?.authUser || null) as SessionAuthUser | null;
 };
 
+const normalizeRole = (value: unknown): string => String(value || '').toUpperCase();
+
 const requireAuth = (req: Request, res: Response, next: Function) => {
   if (AUTH_BYPASS) return next();
   if (!getSessionAuthUser(req)) {
@@ -211,8 +213,8 @@ const requireRoles = (...roles: string[]) => {
     if (AUTH_BYPASS) return next();
     const actor = getSessionAuthUser(req);
     if (!actor) return res.status(401).json({ error: 'Authentication required' });
-    const actorRole = String(actor.role || '').toUpperCase();
-    const allowedRoles = roles.map((r) => String(r).toUpperCase());
+    const actorRole = normalizeRole(actor.role);
+    const allowedRoles = roles.map((r) => normalizeRole(r));
     if (!allowedRoles.includes(actorRole)) return res.status(403).json({ error: 'Forbidden' });
     next();
   };
@@ -224,7 +226,9 @@ const requireSelfOrRoles = (...roles: string[]) => {
     const actor = getSessionAuthUser(req);
     if (!actor) return res.status(401).json({ error: 'Authentication required' });
     if (String(actor.id) === String(req.params.id)) return next();
-    if (roles.includes(actor.role)) return next();
+    const actorRole = normalizeRole(actor.role);
+    const allowedRoles = roles.map((r) => normalizeRole(r));
+    if (allowedRoles.includes(actorRole)) return next();
     return res.status(403).json({ error: 'Forbidden' });
   };
 };
@@ -626,6 +630,8 @@ const USER_ATTRS = [
   'id', 'name', 'email', 'role', 'status', 'profilePic', 'joinedDate', 'capitalShare',
 ] as const;
 const ALLOWED_ROLES = ['MEMBER', 'ADMIN', 'SECRETARY', 'TREASURER'] as const;
+const isAllowedRole = (role: string): role is (typeof ALLOWED_ROLES)[number] =>
+  (ALLOWED_ROLES as readonly string[]).includes(role);
 
 router.get('/users', requireRoles('ADMIN', 'SECRETARY', 'TREASURER'), async (req: Request, res: Response) => {
   try {
@@ -637,7 +643,7 @@ router.get('/users', requireRoles('ADMIN', 'SECRETARY', 'TREASURER'), async (req
         { email: { [Op.like as any]: `%${search}%` } },
       ];
     }
-    if (role) where.role = role;
+    if (role) where.role = normalizeRole(role);
     if (status) where.status = status;
     const pageNum = parseInt(page as string) || 0;
     const limitNum = parseInt(limit as string) || 0;
@@ -657,10 +663,17 @@ router.get('/users', requireRoles('ADMIN', 'SECRETARY', 'TREASURER'), async (req
 
 router.get('/users/:id', requireSelfOrRoles('ADMIN', 'SECRETARY', 'TREASURER'), async (req: Request, res: Response) => {
   try {
+    const actor = getSessionAuthUser(req);
     const user = await User.findByPk(req.params.id, {
       attributes: [...USER_ATTRS],
     });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) {
+      if (actor && String(actor.id) === String(req.params.id)) {
+        (req.session as any).authUser = null;
+        return res.status(401).json({ error: 'Session user not found' });
+      }
+      return res.status(404).json({ error: 'User not found' });
+    }
     res.json(user);
   } catch (err) {
     console.error(err);
@@ -673,12 +686,15 @@ router.put('/users/:id', requireSelfOrRoles('ADMIN'), async (req: Request, res: 
     const { id } = req.params;
     const actor = getSessionAuthUser(req);
     const payload = { ...(req.body || {}) };
-    if (actor?.role !== 'ADMIN') {
+    if (normalizeRole(actor?.role) !== 'ADMIN') {
       delete (payload as any).role;
       delete (payload as any).status;
       delete (payload as any).capitalShare;
     }
-    if ((payload as any)?.role && !ALLOWED_ROLES.includes((payload as any).role)) {
+    if ((payload as any)?.role) {
+      (payload as any).role = normalizeRole((payload as any).role);
+    }
+    if ((payload as any)?.role && !isAllowedRole((payload as any).role)) {
       return res.status(400).json({ error: 'Invalid role. Allowed roles: MEMBER, ADMIN, SECRETARY, TREASURER' });
     }
     await User.update(payload, { where: { id } });
@@ -721,9 +737,9 @@ router.put('/users/:id/status', requireRoles('ADMIN'), async (req: Request, res:
 router.put('/users/:id/role', requireRoles('ADMIN'), async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { role } = req.body;
+    const role = normalizeRole((req.body || {}).role);
     if (!role) return res.status(400).json({ error: 'Role is required' });
-    if (!ALLOWED_ROLES.includes(role)) {
+    if (!isAllowedRole(role)) {
       return res.status(400).json({ error: 'Invalid role. Allowed roles: MEMBER, ADMIN, SECRETARY, TREASURER' });
     }
     await User.update({ role }, { where: { id } });
