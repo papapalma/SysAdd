@@ -1804,17 +1804,35 @@ router.delete('/announcements/:id', requireRoles('ADMIN', 'SECRETARY'), async (r
 
 // ─── Capital Share: Summary (all members) ───────────────────────────────
 // NOTE: /capital-share/summary MUST be registered before /capital-share/:memberId
+let capitalShareQueriesDisabled = false;
+
 function softFailCapitalShare(err: any): boolean {
   const code = err?.original?.code || err?.parent?.code;
+  const message = String(err?.original?.message || err?.message || '').toLowerCase();
   return (
     code === 'ER_NO_SUCH_TABLE' ||
     code === 'ER_TABLEACCESS_DENIED_ERROR' ||
     code === 'ER_DBACCESS_DENIED_ERROR' ||
-    code === 'ER_NO_DB_ERROR'
+    code === 'ER_NO_DB_ERROR' ||
+    code === 'ER_BAD_FIELD_ERROR' ||
+    message.includes('unknown column') ||
+    message.includes('doesn\'t exist')
   );
 }
 
+function disableCapitalShareQueries(err: any): boolean {
+  if (!softFailCapitalShare(err)) return false;
+  if (!capitalShareQueriesDisabled) {
+    capitalShareQueriesDisabled = true;
+    console.warn('[capital-share] Queries disabled (table missing/schema mismatch/access denied). Returning empty data.');
+  }
+  return true;
+}
+
 router.get('/capital-share/summary', requireRoles('ADMIN', 'TREASURER'), async (req: Request, res: Response) => {
+  if (capitalShareQueriesDisabled) {
+    return res.json([]);
+  }
   try {
     const hasPagination = req.query.page !== undefined || req.query.limit !== undefined;
     const page = Math.max(parseInt(String(req.query.page)) || 1, 1);
@@ -1841,7 +1859,7 @@ router.get('/capital-share/summary', requireRoles('ADMIN', 'TREASURER'), async (
     res.json({ items, total, page, totalPages: Math.ceil(total / limit) || 1 });
   } catch (err) {
     console.error('Capital share summary error', err);
-    if (softFailCapitalShare(err)) {
+    if (disableCapitalShareQueries(err)) {
       return res.json([]);
     }
     res.status(500).json({ error: 'Server error' });
@@ -1851,6 +1869,9 @@ router.get('/capital-share/summary', requireRoles('ADMIN', 'TREASURER'), async (
 // ─── Capital Share: Pending Transactions (all members) ─────────────────
 // NOTE: /capital-share/pending MUST be registered before /capital-share/:memberId
 router.get('/capital-share/pending', requireRoles('ADMIN', 'TREASURER'), async (_req: Request, res: Response) => {
+  if (capitalShareQueriesDisabled) {
+    return res.json([]);
+  }
   try {
     const txs = await CapitalShareTransaction.findAll({
       where: { status: 'Pending' },
@@ -1863,7 +1884,7 @@ router.get('/capital-share/pending', requireRoles('ADMIN', 'TREASURER'), async (
     res.json(txs);
   } catch (err) {
     console.error('Capital share pending error', err);
-    if (softFailCapitalShare(err)) {
+    if (disableCapitalShareQueries(err)) {
       return res.json([]);
     }
     res.status(500).json({ error: 'Server error' });
@@ -1873,6 +1894,9 @@ router.get('/capital-share/pending', requireRoles('ADMIN', 'TREASURER'), async (
 // ─── Capital Share: All Transactions (all members) ─────────────────────
 // NOTE: /capital-share/transactions MUST be registered before /capital-share/:memberId
 router.get('/capital-share/transactions', requireRoles('ADMIN', 'TREASURER'), async (_req: Request, res: Response) => {
+  if (capitalShareQueriesDisabled) {
+    return res.json([]);
+  }
   try {
     const txs = await CapitalShareTransaction.findAll({
       include: [
@@ -1885,7 +1909,7 @@ router.get('/capital-share/transactions', requireRoles('ADMIN', 'TREASURER'), as
     res.json(txs);
   } catch (err) {
     console.error('Capital share transactions error', err);
-    if (softFailCapitalShare(err)) {
+    if (disableCapitalShareQueries(err)) {
       return res.json([]);
     }
     res.status(500).json({ error: 'Server error' });
@@ -1894,6 +1918,9 @@ router.get('/capital-share/transactions', requireRoles('ADMIN', 'TREASURER'), as
 
 // ─── Capital Share: Ledger for one member ───────────────────────────────
 router.get('/capital-share/:memberId', requireAuth, async (req: Request, res: Response) => {
+  if (capitalShareQueriesDisabled) {
+    return res.json([]);
+  }
   try {
     const actor = getSessionAuthUser(req)!;
     if (actor.role === 'MEMBER' && String(actor.id) !== String(req.params.memberId)) {
@@ -1917,7 +1944,7 @@ router.get('/capital-share/:memberId', requireAuth, async (req: Request, res: Re
     res.json(withBalance);
   } catch (err) {
     console.error('Capital share ledger error', err);
-    if (softFailCapitalShare(err)) {
+    if (disableCapitalShareQueries(err)) {
       return res.json([]);
     }
     res.status(500).json({ error: 'Server error' });

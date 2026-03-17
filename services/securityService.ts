@@ -7,11 +7,15 @@ let loginAttemptLoggingDisabled = false;
 
 function shouldDisableLoginAttempts(err: any): boolean {
   const code = err?.original?.code || err?.parent?.code;
+  const message = String(err?.original?.message || err?.message || '').toLowerCase();
   return (
     code === 'ER_NO_SUCH_TABLE' ||
     code === 'ER_TABLEACCESS_DENIED_ERROR' ||
     code === 'ER_DBACCESS_DENIED_ERROR' ||
-    code === 'ER_NO_DB_ERROR'
+    code === 'ER_NO_DB_ERROR' ||
+    code === 'ER_BAD_FIELD_ERROR' ||
+    message.includes('unknown column') ||
+    message.includes('doesn\'t exist')
   );
 }
 
