@@ -1,8 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
 import type { Express } from 'express';
 import type { SessionOptions } from 'express-session';
+import session from 'express-session';
 import { parse as parseUrl } from 'url';
 import path from 'path';
+import { sequelize } from '../models/db.js';
 
 const parseBool = (value: string | undefined, fallback: boolean = false) => {
   if (value === undefined) return fallback;
@@ -158,12 +160,35 @@ const sessionSecret = process.env.SESSION_SECRET || 'dev-session-secret';
 const cookieSecure = true; // Hostinger uses HTTPS; keep cookies secure in prod
 const sameSiteMode = 'none' as const; // allow cross-site cookies (frontend on different domain)
 const cookieDomain = (process.env.SESSION_COOKIE_DOMAIN || '').trim() || undefined;
+const isProd = process.env.NODE_ENV === 'production';
+
+let sessionStore: SessionOptions['store'] | undefined;
+
+if (isProd) {
+  try {
+    // Lazy-load so local dev can still run even before dependencies are installed.
+    const SequelizeStoreFactory = require('connect-session-sequelize');
+    const SequelizeStore = SequelizeStoreFactory(session.Store);
+    sessionStore = new SequelizeStore({
+      db: sequelize,
+      tableName: 'Sessions',
+      checkExpirationInterval: 15 * 60 * 1000,
+      expiration: 30 * 24 * 60 * 60 * 1000,
+    });
+    (sessionStore as any).sync?.();
+    console.log('[session] Using Sequelize session store');
+  } catch (err) {
+    console.warn('[session] connect-session-sequelize not available; falling back to MemoryStore in production');
+    console.warn('[session] Install dependency: npm install connect-session-sequelize');
+  }
+}
 
 export const sessionConfig: SessionOptions = {
   secret: sessionSecret,
   name: 'micaco.sid',
   resave: false,
   saveUninitialized: false,
+  ...(sessionStore ? { store: sessionStore } : {}),
   cookie: {
     httpOnly: true,
     secure: cookieSecure,
