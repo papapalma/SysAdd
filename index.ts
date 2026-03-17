@@ -35,7 +35,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // ─── Static Files ─────────────────────────────────────────────────────────
-const publicDir = path.join(__dirname, 'public');
+// Use the same public directory as the upload handler (../public) so uploaded
+// assets like the logo are actually served in production builds.
+const publicDir = path.resolve(__dirname, '..', 'public');
 app.use(express.static(publicDir));
 
 // ─── Sessions ─────────────────────────────────────────────────────────────

@@ -241,7 +241,10 @@ const requireSelfOrRoles = (...roles: string[]) => {
 
 router.get('/auth/me', requireAuth, async (req: Request, res: Response) => {
   try {
-    const actor = getSessionAuthUser(req)!;
+    const actor = getSessionAuthUser(req);
+    if (!actor) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
     const user: any = await User.findByPk(actor.id, {
       attributes: ['id', 'name', 'email', 'role', 'status', 'profilePic', 'joinedDate', 'capitalShare', 'googleVerified'],
     });
