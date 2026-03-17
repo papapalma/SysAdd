@@ -978,6 +978,12 @@ const reportUpload = upload.fields([
   { name: 'videos', maxCount: 5 },
 ]);
 
+const isUnknownColumnError = (err: unknown): boolean => {
+  const anyErr = err as any;
+  const message = String(anyErr?.message || '').toLowerCase();
+  return anyErr?.original?.code === 'ER_BAD_FIELD_ERROR' || message.includes('unknown column');
+};
+
 router.get('/reports', async (req: Request, res: Response) => {
   try {
     const { search, type, status, approvalStatus, projectId, from, to, page, limit } = req.query;
@@ -1147,18 +1153,31 @@ router.post(
       const project: any = await Project.findByPk(id);
       if (!project) return res.status(404).json({ error: 'Project not found' });
 
+      // Keep initial insert compatible with older production schemas.
       const report: any = await Report.create({
         projectId: id,
         userId: actor.id,
-        submittedBy: actor.id,
-        approvalStatus: 'Pending',
         title,
         description,
         imageUrl,
         additionalImages,
         videos,
-        milestoneId: req.body.milestoneId || null,
       });
+
+      // Best-effort enrichment for newer columns; do not fail if schema is lagging.
+      try {
+        (report as any).set({
+          submittedBy: actor.id,
+          approvalStatus: 'Pending',
+          milestoneId: req.body.milestoneId || null,
+        });
+        await report.save();
+      } catch (updateErr) {
+        if (!isUnknownColumnError(updateErr)) {
+          throw updateErr;
+        }
+        console.warn('Report optional fields skipped due to schema mismatch:', (updateErr as any)?.message || updateErr);
+      }
 
       try {
         await Log.create({
@@ -1170,7 +1189,8 @@ router.post(
       res.status(201).json(report);
     } catch (err) {
       console.error('Report POST error', err);
-      res.status(500).json({ error: 'Server error' });
+      const message = (err as any)?.message || 'Server error';
+      res.status(500).json({ error: 'Server error', message });
     }
   }
 );
