@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import fs from 'fs';
 import path from 'path';
 import session from 'express-session';
 import cors from 'cors';
@@ -79,9 +80,13 @@ app.use(express.json({ limit: `${MAX_REQUEST_SIZE_MB}mb` }));
 app.use(express.urlencoded({ extended: true, limit: `${MAX_REQUEST_SIZE_MB}mb` }));
 
 // ─── Static Files ─────────────────────────────────────────────────────────
-// Use the same public directory as the upload handler (../public) so uploaded
-// assets like the logo are actually served in production builds.
-const publicDir = path.resolve(__dirname, '..', 'public');
+// Resolve backend public dir across tsx/dev and dist/prod layouts.
+const publicDirCandidates = [
+  path.resolve(process.cwd(), 'public'),
+  path.resolve(__dirname, '..', 'public'),
+  path.resolve(__dirname, 'public'),
+];
+const publicDir = publicDirCandidates.find((dir) => fs.existsSync(dir)) || publicDirCandidates[0];
 app.use(express.static(publicDir));
 
 // ─── Sessions ─────────────────────────────────────────────────────────────

@@ -27,7 +27,12 @@ const router = Router();
 const MAX_UPLOAD_FILE_SIZE_MB = Math.max(1, Number(process.env.MAX_UPLOAD_FILE_SIZE_MB) || 25);
 const MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024;
 
-const backendPublicDir = path.resolve(__dirname, '..', 'public');
+const backendPublicDirCandidates = [
+  path.resolve(process.cwd(), 'public'),
+  path.resolve(__dirname, '..', 'public'),
+  path.resolve(__dirname, '..', '..', 'public'),
+];
+const backendPublicDir = backendPublicDirCandidates.find((dir) => fs.existsSync(dir)) || backendPublicDirCandidates[0];
 
 async function ensureRequiredSchema(): Promise<void> {
   try {
