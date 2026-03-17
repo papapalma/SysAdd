@@ -1124,7 +1124,34 @@ router.post(
   async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const actor = getSessionAuthUser(req)!;
+      let actor = getSessionAuthUser(req);
+      if (!actor) {
+        if (!AUTH_BYPASS) {
+          return res.status(401).json({ error: 'Authentication required' });
+        }
+
+        const fallbackActorId = Number(req.body?.userId ?? req.body?.submittedBy ?? 0);
+        if (!Number.isInteger(fallbackActorId) || fallbackActorId <= 0) {
+          return res.status(400).json({
+            error: 'userId is required when DISABLE_AUTH=true and no session user exists',
+          });
+        }
+
+        const fallbackUser: any = await User.findByPk(fallbackActorId, {
+          attributes: ['id', 'role', 'email', 'name', 'status'],
+        });
+        if (!fallbackUser) {
+          return res.status(400).json({ error: 'Invalid userId for report submission' });
+        }
+
+        actor = {
+          id: fallbackUser.id,
+          role: fallbackUser.role,
+          email: fallbackUser.email,
+          name: fallbackUser.name,
+          status: fallbackUser.status,
+        };
+      }
       const { title, description } = req.body;
 
       if (!title || !String(title).trim()) {
