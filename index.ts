@@ -100,8 +100,5 @@ export default app;
 
 if (!process.env.ELECTRON) {
   app.listen(PORT, HOST, () => {
-    console.log(`Server running at http://${HOST}:${PORT}`);
-    if (FRONTEND_URL) console.log(`Allowed frontend: ${FRONTEND_URL}`);
-    if (API_ORIGIN) console.log(`API origin (CSP/CORS): ${API_ORIGIN}`);
   });
 }

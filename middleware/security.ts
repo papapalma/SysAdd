@@ -176,7 +176,6 @@ if (isProd) {
       expiration: 30 * 24 * 60 * 60 * 1000,
     });
     (sessionStore as any).sync?.();
-    console.log('[session] Using Sequelize session store');
   } catch (err) {
     console.warn('[session] connect-session-sequelize not available; falling back to MemoryStore in production');
     console.warn('[session] Install dependency: npm install connect-session-sequelize');

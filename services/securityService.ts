@@ -219,7 +219,6 @@ export async function cleanupOldAttempts(daysToKeep = 90): Promise<number> {
     const deleted = await LoginAttempt.destroy({
       where: { timestamp: { [Op.lt]: cutoffDate } },
     });
-    console.log(`Cleaned up ${deleted} old login attempts`);
     return deleted;
   } catch (error) {
     console.error('Failed to cleanup old attempts:', error);

@@ -48,7 +48,6 @@ async function ensureRequiredSchema(): Promise<void> {
         allowNull: false,
         defaultValue: false,
       });
-      console.log('[schema] Added Users.googleVerified');
     }
     const userIndexes: any[] = (await qi.showIndex('Users')) as any[];
     const hasEmailUnique = userIndexes.some((idx: any) =>
@@ -56,7 +55,6 @@ async function ensureRequiredSchema(): Promise<void> {
     );
     if (!hasEmailUnique) {
       await qi.addIndex('Users', ['email'], { unique: true, name: 'users_email_unique' });
-      console.log('[schema] Added unique index Users.email');
     }
 
     const reportsTable = await qi.describeTable('Reports');
@@ -65,28 +63,24 @@ async function ensureRequiredSchema(): Promise<void> {
         type: DataTypes.INTEGER,
         allowNull: true,
       });
-      console.log('[schema] Added Reports.submittedBy');
     }
     if (!reportsTable.confirmedBy) {
       await qi.addColumn('Reports', 'confirmedBy', {
         type: DataTypes.INTEGER,
         allowNull: true,
       });
-      console.log('[schema] Added Reports.confirmedBy');
     }
     if (!reportsTable.confirmedAt) {
       await qi.addColumn('Reports', 'confirmedAt', {
         type: DataTypes.DATE,
         allowNull: true,
       });
-      console.log('[schema] Added Reports.confirmedAt');
     }
     if (!reportsTable.confirmationNote) {
       await qi.addColumn('Reports', 'confirmationNote', {
         type: DataTypes.TEXT,
         allowNull: true,
       });
-      console.log('[schema] Added Reports.confirmationNote');
     }
   } catch (err) {
     console.error('Schema bootstrap error:', err);
@@ -98,15 +92,6 @@ async function ensureRequiredSchema(): Promise<void> {
 
 // ─── Request Logger ────────────────────────────────────────────────────────
 router.use((req: Request, _res: Response, next) => {
-  try {
-    const body =
-      req.body && Object.keys(req.body).length
-        ? ` body=${JSON.stringify(req.body)}`
-        : '';
-    console.log(`[api] ${req.method} ${req.originalUrl}${body}`);
-  } catch {
-    console.log('[api] request received');
-  }
   next();
 });
 
