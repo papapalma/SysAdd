@@ -162,7 +162,8 @@ async function resizeImage(
 // ─── Google OAuth Setup ───────────────────────────────────────────────────
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3000/api/auth/google/callback';
+const API_ORIGIN = (process.env.API_ORIGIN || 'https://micaco.org').replace(/\/+$/, '');
+const GOOGLE_CALLBACK_URL = (process.env.GOOGLE_CALLBACK_URL || `${API_ORIGIN}/api/auth/google/callback`).trim();
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 passport.serializeUser((user: any, done) => done(null, user));
@@ -253,6 +254,10 @@ router.get('/auth/me', requireAuth, async (req: Request, res: Response) => {
 
 // ─── Google OAuth: Initiate ───────────────────────────────────────────────
 router.get('/auth/google', (req: Request, res: Response, next) => {
+  if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+    return res.redirect(`${FRONTEND_URL}/?register=true&error=oauth_disabled`);
+  }
+
   const { email } = req.query;
   if (!email || typeof email !== 'string') {
     return res.status(400).json({ error: 'email query param required' });
@@ -262,20 +267,26 @@ router.get('/auth/google', (req: Request, res: Response, next) => {
   (req.session as any).pendingEmail = null;
   // Store pending email for verification
   (req.session as any).pendingEmail = email.toLowerCase().trim();
-  passport.authenticate('google', { scope: ['email', 'profile'], prompt: 'select_account' })(req, res, next);
+  passport.authenticate('google', {
+    scope: ['email', 'profile'],
+    prompt: 'select_account',
+  })(req, res, next);
 });
 
 // ─── Google OAuth: Callback ───────────────────────────────────────────────
 router.get(
   '/auth/google/callback',
   (req: Request, res: Response, next) => {
-    if (!GOOGLE_CLIENT_ID) {
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
       return res.redirect(`${FRONTEND_URL}/?register=true&error=oauth_disabled`);
     }
     // Clear any stale verification state before handling callback
     (req.session as any).googleVerifiedEmail = null;
     (req.session as any).pendingEmail = null;
-    passport.authenticate('google', { session: false, failureRedirect: `${FRONTEND_URL}/?register=true&error=google_failed` })(req, res, next);
+    passport.authenticate('google', {
+      session: false,
+      failureRedirect: `${FRONTEND_URL}/?register=true&error=google_failed`,
+    })(req, res, next);
   },
   async (req: Request, res: Response) => {
     try {
