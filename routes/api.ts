@@ -1126,6 +1126,11 @@ router.post(
       const { id } = req.params;
       const actor = getSessionAuthUser(req)!;
       const { title, description } = req.body;
+
+      if (!title || !String(title).trim()) {
+        return res.status(400).json({ error: 'Title is required' });
+      }
+
       const files = req.files as Record<string, Express.Multer.File[]>;
 
       let imageUrl: string | null = null;
@@ -1153,7 +1158,7 @@ router.post(
       const project: any = await Project.findByPk(id);
       if (!project) return res.status(404).json({ error: 'Project not found' });
 
-      // Keep initial insert compatible with older production schemas.
+      // Insert using core fields first to keep compatibility with older schemas.
       const report: any = await Report.create({
         projectId: id,
         userId: actor.id,
@@ -1164,7 +1169,7 @@ router.post(
         videos,
       });
 
-      // Best-effort enrichment for newer columns; do not fail if schema is lagging.
+      // Best-effort update for optional newer columns.
       try {
         (report as any).set({
           submittedBy: actor.id,
@@ -1173,9 +1178,7 @@ router.post(
         });
         await report.save();
       } catch (updateErr) {
-        if (!isUnknownColumnError(updateErr)) {
-          throw updateErr;
-        }
+        if (!isUnknownColumnError(updateErr)) throw updateErr;
         console.warn('Report optional fields skipped due to schema mismatch:', (updateErr as any)?.message || updateErr);
       }
 
