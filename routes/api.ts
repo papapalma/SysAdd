@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import type { Express } from 'express';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
@@ -24,6 +24,8 @@ import security from '../middleware/security.js';
 import { validatePasswordStrength, calculatePasswordStrength, getPasswordStrengthLabel } from '../utils/passwordValidator.js';
 
 const router = Router();
+const MAX_UPLOAD_FILE_SIZE_MB = Math.max(1, Number(process.env.MAX_UPLOAD_FILE_SIZE_MB) || 25);
+const MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024;
 
 const backendPublicDir = path.resolve(__dirname, '..', 'public');
 
@@ -142,7 +144,7 @@ const fileFilter = (
 const upload = multer({
   storage,
   fileFilter,
-  limits: { fileSize: 10 * 1024 * 1024, files: 20 },
+  limits: { fileSize: MAX_UPLOAD_FILE_SIZE_BYTES, files: 20 },
 });
 
 // ─── Image Resize Helper ──────────────────────────────────────────────────
@@ -1980,6 +1982,16 @@ router.put('/capital-share/:txId/reject', requireRoles('ADMIN', 'TREASURER'), as
     }
     res.status(500).json({ error: 'Server error' });
   }
+});
+
+// Normalize upload-limit failures into API-friendly 413 responses.
+router.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(413).json({
+      error: `File too large. Max upload size is ${MAX_UPLOAD_FILE_SIZE_MB}MB per file.`,
+    });
+  }
+  return next(err);
 });
 
 export default router;

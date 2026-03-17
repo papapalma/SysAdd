@@ -12,6 +12,8 @@ const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 const FRONTEND_URL = (process.env.FRONTEND_URL || '').trim();
 const API_ORIGIN = (process.env.API_ORIGIN || '').trim();
+const MAX_REQUEST_SIZE_MB = Math.max(1, Number(process.env.MAX_REQUEST_SIZE_MB) || 25);
+const MAX_REQUEST_SIZE_BYTES = MAX_REQUEST_SIZE_MB * 1024 * 1024;
 const extraCorsOrigins = (process.env.CORS_ORIGINS || '')
   .split(',')
   .map((origin) => origin.trim())
@@ -23,25 +25,6 @@ if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
 
 // Trust proxy for correct secure cookies and protocol detection behind Hostinger proxy
 app.set('trust proxy', 1);
-
-// ─── Security Middleware (applied first) ───────────────────────────────────
-app.disable('x-powered-by');
-app.use(security.securityHeadersMiddleware);
-app.use(security.preventParameterPollution);
-app.use(security.requestSizeLimit(10 * 1024 * 1024));
-
-// ─── Body Parsers ──────────────────────────────────────────────────────────
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// ─── Static Files ─────────────────────────────────────────────────────────
-// Use the same public directory as the upload handler (../public) so uploaded
-// assets like the logo are actually served in production builds.
-const publicDir = path.resolve(__dirname, '..', 'public');
-app.use(express.static(publicDir));
-
-// ─── Sessions ─────────────────────────────────────────────────────────────
-app.use(session(security.sessionConfig));
 
 // ─── CORS for API routes ───────────────────────────────────────────────────
 const devOrigins = [
@@ -71,18 +54,38 @@ const allowedOrigins = Array.from(
   ].map(normalizeOrigin))
 );
 
-app.use(
-  '/api',
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(normalizeOrigin(origin))) return callback(null, true);
-      console.warn(`[cors] Blocked origin: ${origin}`);
-      return callback(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-  })
-);
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(normalizeOrigin(origin))) return callback(null, true);
+    console.warn(`[cors] Blocked origin: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+};
+
+// Apply CORS before body-size checks so 4xx responses still include CORS headers.
+app.use('/api', cors(corsOptions));
+app.options('/api/*', cors(corsOptions));
+
+// ─── Security Middleware (applied first for all non-CORS concerns) ───────
+app.disable('x-powered-by');
+app.use(security.securityHeadersMiddleware);
+app.use(security.preventParameterPollution);
+app.use(security.requestSizeLimit(MAX_REQUEST_SIZE_BYTES));
+
+// ─── Body Parsers ──────────────────────────────────────────────────────────
+app.use(express.json({ limit: `${MAX_REQUEST_SIZE_MB}mb` }));
+app.use(express.urlencoded({ extended: true, limit: `${MAX_REQUEST_SIZE_MB}mb` }));
+
+// ─── Static Files ─────────────────────────────────────────────────────────
+// Use the same public directory as the upload handler (../public) so uploaded
+// assets like the logo are actually served in production builds.
+const publicDir = path.resolve(__dirname, '..', 'public');
+app.use(express.static(publicDir));
+
+// ─── Sessions ─────────────────────────────────────────────────────────────
+app.use(session(security.sessionConfig));
 
 // ─── Routes ───────────────────────────────────────────────────────────────
 app.use('/api', apiRouter);
