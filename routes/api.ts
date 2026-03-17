@@ -27,12 +27,10 @@ const router = Router();
 const MAX_UPLOAD_FILE_SIZE_MB = Math.max(1, Number(process.env.MAX_UPLOAD_FILE_SIZE_MB) || 25);
 const MAX_UPLOAD_FILE_SIZE_BYTES = MAX_UPLOAD_FILE_SIZE_MB * 1024 * 1024;
 
-const backendPublicDirCandidates = [
-  path.resolve(process.cwd(), 'public'),
-  path.resolve(__dirname, '..', 'public'),
-  path.resolve(__dirname, '..', '..', 'public'),
-];
-const backendPublicDir = backendPublicDirCandidates.find((dir) => fs.existsSync(dir)) || backendPublicDirCandidates[0];
+const configuredUploadDir = (process.env.UPLOAD_DIR || '').trim();
+const uploadDir = configuredUploadDir
+  ? path.resolve(configuredUploadDir)
+  : path.resolve(process.cwd(), 'public', 'uploads');
 
 async function ensureRequiredSchema(): Promise<void> {
   try {
@@ -96,7 +94,6 @@ router.use((req: Request, _res: Response, next) => {
 });
 
 // ─── File Upload Setup ────────────────────────────────────────────────────
-const uploadDir = path.join(backendPublicDir, 'uploads');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({

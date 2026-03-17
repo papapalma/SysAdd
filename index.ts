@@ -87,7 +87,17 @@ const publicDirCandidates = [
   path.resolve(__dirname, 'public'),
 ];
 const publicDir = publicDirCandidates.find((dir) => fs.existsSync(dir)) || publicDirCandidates[0];
+const configuredUploadDir = (process.env.UPLOAD_DIR || '').trim();
+const uploadDir = configuredUploadDir
+  ? path.resolve(configuredUploadDir)
+  : path.resolve(process.cwd(), 'public', 'uploads');
+
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
+
 app.use(express.static(publicDir));
+app.use('/uploads', express.static(uploadDir));
 
 // ─── Sessions ─────────────────────────────────────────────────────────────
 app.use(session(security.sessionConfig));
