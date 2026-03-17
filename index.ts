@@ -51,20 +51,33 @@ const devOrigins = [
   'http://127.0.0.1:5174',
 ];
 
+const prodOrigins = [
+  'https://micaco.site',
+  'https://www.micaco.site',
+];
+
+const normalizeOrigin = (value: string): string => {
+  const normalized = value.trim().toLowerCase().replace(/\/+$/, '');
+  return normalized;
+};
+
 const allowedOrigins = Array.from(
   new Set([
     ...devOrigins,
+    ...prodOrigins,
     ...(FRONTEND_URL ? [FRONTEND_URL] : []),
     ...(API_ORIGIN ? [API_ORIGIN] : []),
     ...extraCorsOrigins,
-  ])
+  ].map(normalizeOrigin))
 );
 
 app.use(
   '/api',
   cors({
     origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(normalizeOrigin(origin))) return callback(null, true);
+      console.warn(`[cors] Blocked origin: ${origin}`);
       return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
