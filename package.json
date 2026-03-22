@@ -8,6 +8,7 @@
     "build": "tsc --outDir dist --noEmit false",
     "start:prod": "node dist/index.js",
     "migrate": "node migrate.js",
+    "migrate:user-profile-fields": "node migrate-add-user-profile-fields.js",
     "create:model": "node create.js model",
     "create:controller": "node create.js controller"
   },
