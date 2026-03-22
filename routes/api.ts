@@ -32,6 +32,59 @@ const uploadDir = configuredUploadDir
   ? path.resolve(configuredUploadDir)
   : path.resolve(process.cwd(), 'public', 'uploads');
 
+let userProfileColumnsReady: Promise<void> | null = null;
+
+async function ensureUserProfileColumns(): Promise<void> {
+  if (userProfileColumnsReady) return userProfileColumnsReady;
+
+  userProfileColumnsReady = (async () => {
+    const qi = sequelize.getQueryInterface();
+    const usersTable = await qi.describeTable('Users');
+
+    if (!usersTable.firstName) {
+      await qi.addColumn('Users', 'firstName', {
+        type: DataTypes.STRING,
+        allowNull: true,
+      });
+    }
+    if (!usersTable.middleName) {
+      await qi.addColumn('Users', 'middleName', {
+        type: DataTypes.STRING,
+        allowNull: true,
+      });
+    }
+    if (!usersTable.maidenName) {
+      await qi.addColumn('Users', 'maidenName', {
+        type: DataTypes.STRING,
+        allowNull: true,
+      });
+    }
+    if (!usersTable.birthday) {
+      await qi.addColumn('Users', 'birthday', {
+        type: DataTypes.DATEONLY,
+        allowNull: true,
+      });
+    }
+    if (!usersTable.address) {
+      await qi.addColumn('Users', 'address', {
+        type: DataTypes.STRING,
+        allowNull: true,
+      });
+    }
+    if (!usersTable.placeOfBirth) {
+      await qi.addColumn('Users', 'placeOfBirth', {
+        type: DataTypes.STRING,
+        allowNull: true,
+      });
+    }
+  })().catch((err) => {
+    userProfileColumnsReady = null;
+    throw err;
+  });
+
+  return userProfileColumnsReady;
+}
+
 async function ensureRequiredSchema(): Promise<void> {
   try {
     // Keep sync non-destructive: create missing tables only.
@@ -240,7 +293,7 @@ router.get('/auth/me', requireAuth, async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Authentication required' });
     }
     const user: any = await User.findByPk(actor.id, {
-      attributes: ['id', 'name', 'email', 'role', 'status', 'profilePic', 'joinedDate', 'capitalShare', 'googleVerified'],
+      attributes: ['id', 'name', 'firstName', 'middleName', 'maidenName', 'birthday', 'address', 'placeOfBirth', 'email', 'role', 'status', 'profilePic', 'joinedDate', 'capitalShare', 'googleVerified'],
     });
     if (!user) {
       (req.session as any).authUser = null;
@@ -534,11 +587,53 @@ router.post('/login', async (req: Request, res: Response) => {
 // ─── Auth: Register ────────────────────────────────────────────────────────
 router.post('/register', async (req: Request, res: Response) => {
   try {
-    const { name, email, password } = req.body;
+    await ensureUserProfileColumns();
+
+    const {
+      name,
+      firstName,
+      middleName,
+      maidenName,
+      birthday,
+      address,
+      placeOfBirth,
+      email,
+      password,
+    } = req.body || {};
+
+    const normalizedFirstName = String(firstName || '').trim();
+    const normalizedMiddleName = String(middleName || '').trim();
+    const normalizedMaidenName = String(maidenName || '').trim();
+    const normalizedAddress = String(address || '').trim();
+    const normalizedPlaceOfBirth = String(placeOfBirth || '').trim();
+    const normalizedBirthday = String(birthday || '').trim();
+    const fallbackName = String(name || '').trim();
+    const computedName = [normalizedFirstName, normalizedMiddleName, normalizedMaidenName]
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const normalizedName = computedName || fallbackName;
 
     const normalizedEmail = String(email || '').toLowerCase().trim();
     const sessionVerified = String((req.session as any).googleVerifiedEmail || '').toLowerCase().trim();
     const isGoogleVerified = !!normalizedEmail && sessionVerified === normalizedEmail;
+
+    if (!normalizedName || !normalizedEmail || !password) {
+      return res.status(400).json({ error: 'Name, email, and password are required' });
+    }
+
+    // If profile details are provided from the new registration UI, require all of them.
+    const hasAnyExtendedProfileField = Boolean(
+      normalizedFirstName || normalizedMiddleName || normalizedMaidenName || normalizedBirthday || normalizedAddress || normalizedPlaceOfBirth
+    );
+    if (hasAnyExtendedProfileField) {
+      if (!normalizedFirstName || !normalizedMiddleName || !normalizedMaidenName || !normalizedBirthday || !normalizedAddress || !normalizedPlaceOfBirth) {
+        return res.status(400).json({
+          error: 'First name, middle name, maiden name, birthday, address, and place of birth are required',
+        });
+      }
+    }
 
     if (!isGoogleVerified) {
       return res.status(400).json({
@@ -547,23 +642,40 @@ router.post('/register', async (req: Request, res: Response) => {
       });
     }
 
-    const existing = await User.findOne({ where: { email } });
+    const existing = await User.findOne({ where: { email: normalizedEmail } });
     if (existing) return res.status(409).json({ error: 'Email already registered' });
 
     const hashed = await bcrypt.hash(password, 10);
     if (isGoogleVerified) delete (req.session as any).googleVerifiedEmail;
-    const user: any = await User.create({ name, email, password: hashed, googleVerified: isGoogleVerified });
+    const user: any = await User.create({
+      name: normalizedName,
+      firstName: normalizedFirstName || null,
+      middleName: normalizedMiddleName || null,
+      maidenName: normalizedMaidenName || null,
+      birthday: normalizedBirthday || null,
+      address: normalizedAddress || null,
+      placeOfBirth: normalizedPlaceOfBirth || null,
+      email: normalizedEmail,
+      password: hashed,
+      googleVerified: isGoogleVerified,
+    });
     try {
       await Log.create({
         level: 'info',
         message: 'User registered',
-        meta: JSON.stringify({ userId: user.id, email }),
+        meta: JSON.stringify({ userId: user.id, email: normalizedEmail }),
       });
     } catch {}
     const { id, role, status, profilePic, joinedDate, capitalShare } = user;
     return res.status(201).json({
       id,
       name: user.name,
+      firstName: user.firstName,
+      middleName: user.middleName,
+      maidenName: user.maidenName,
+      birthday: user.birthday,
+      address: user.address,
+      placeOfBirth: user.placeOfBirth,
       email: user.email,
       role,
       status,
@@ -627,7 +739,7 @@ router.post('/check-login-security', async (req: Request, res: Response) => {
 
 // ─── Users ─────────────────────────────────────────────────────────────────
 const USER_ATTRS = [
-  'id', 'name', 'email', 'role', 'status', 'profilePic', 'joinedDate', 'capitalShare',
+  'id', 'name', 'firstName', 'middleName', 'maidenName', 'birthday', 'address', 'placeOfBirth', 'email', 'role', 'status', 'profilePic', 'joinedDate', 'capitalShare',
 ] as const;
 const ALLOWED_ROLES = ['MEMBER', 'ADMIN', 'SECRETARY', 'TREASURER'] as const;
 const isAllowedRole = (role: string): role is (typeof ALLOWED_ROLES)[number] =>
@@ -699,7 +811,7 @@ router.put('/users/:id', requireSelfOrRoles('ADMIN'), async (req: Request, res: 
     }
     await User.update(payload, { where: { id } });
     const user = await User.findByPk(id, {
-      attributes: ['id', 'name', 'email', 'role', 'status', 'capitalShare', 'profilePic', 'joinedDate'],
+      attributes: ['id', 'name', 'firstName', 'middleName', 'maidenName', 'birthday', 'address', 'placeOfBirth', 'email', 'role', 'status', 'capitalShare', 'profilePic', 'joinedDate'],
     });
     try {
       await Log.create({

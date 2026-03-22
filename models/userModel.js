@@ -29,6 +29,12 @@ import { sequelize } from "./db.js";
 
 export const User = sequelize.define("User", {
   name: { type: DataTypes.STRING, allowNull: false },
+  firstName: { type: DataTypes.STRING, allowNull: true },
+  middleName: { type: DataTypes.STRING, allowNull: true },
+  maidenName: { type: DataTypes.STRING, allowNull: true },
+  birthday: { type: DataTypes.DATEONLY, allowNull: true },
+  address: { type: DataTypes.STRING, allowNull: true },
+  placeOfBirth: { type: DataTypes.STRING, allowNull: true },
   email: { type: DataTypes.STRING, allowNull: false, unique: true },
   password: { type: DataTypes.STRING, allowNull: false },
   role: { type: DataTypes.STRING, allowNull: false, defaultValue: 'MEMBER' },
