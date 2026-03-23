@@ -538,7 +538,23 @@ router.post('/login', async (req: Request, res: Response) => {
     await securityService.updateLastLogin(user.id, ipAddress, userAgent);
     const suspicious = await securityService.isSuspiciousIP(ipAddress);
 
-    const { id, name, role, status, profilePic, joinedDate, capitalShare, lastLogin } = user;
+    const {
+      id,
+      name,
+      firstName,
+      middleName,
+      maidenName,
+      birthday,
+      address,
+      placeOfBirth,
+      role,
+      status,
+      profilePic,
+      joinedDate,
+      capitalShare,
+      lastLogin,
+      googleVerified,
+    } = user;
     const normalizedRole = String(role || '').toUpperCase();
     (req.session as any).authUser = {
       id,
@@ -567,6 +583,12 @@ router.post('/login', async (req: Request, res: Response) => {
     return res.json({
       id,
       name,
+      firstName,
+      middleName,
+      maidenName,
+      birthday,
+      address,
+      placeOfBirth,
       email: user.email,
       role: normalizedRole,
       status,
@@ -574,6 +596,7 @@ router.post('/login', async (req: Request, res: Response) => {
       joinedDate,
       capitalShare,
       lastLogin,
+      googleVerified,
       securityAlert: suspicious
         ? 'Login from a previously flagged IP address'
         : null,
@@ -798,10 +821,11 @@ router.put('/users/:id', requireSelfOrRoles('ADMIN'), async (req: Request, res: 
     const { id } = req.params;
     const actor = getSessionAuthUser(req);
     const payload = { ...(req.body || {}) };
+    // Capital share must only change through capital-share transaction endpoints.
+    delete (payload as any).capitalShare;
     if (normalizeRole(actor?.role) !== 'ADMIN') {
       delete (payload as any).role;
       delete (payload as any).status;
-      delete (payload as any).capitalShare;
     }
     if ((payload as any)?.role) {
       (payload as any).role = normalizeRole((payload as any).role);
