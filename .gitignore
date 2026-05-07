@@ -26,5 +26,4 @@ lerna-debug.log*
 Thumbs.db
 
 # Uploads (keep placeholder only)
-public/uploads/*
-!public/uploads/.gitkeep
+
